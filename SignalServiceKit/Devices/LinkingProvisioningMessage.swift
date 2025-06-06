@@ -31,6 +31,7 @@ public struct LinkingProvisioningMessage {
     public let provisioningCode: String
     public let provisioningUserAgent: String?
     public let provisioningVersion: UInt32
+    public let peerExtraPublicKey: Data?
 
     public init(
         rootKey: RootKey,
@@ -45,7 +46,8 @@ public struct LinkingProvisioningMessage {
         areReadReceiptsEnabled: Bool,
         provisioningCode: String,
         provisioningUserAgent: String? = Constants.userAgent,
-        provisioningVersion: UInt32 = Constants.provisioningVersion
+        provisioningVersion: UInt32 = Constants.provisioningVersion,
+        peerExtraPublicKey: Data? = nil
     ) {
         self.rootKey = rootKey
         self.aci = aci
@@ -60,6 +62,7 @@ public struct LinkingProvisioningMessage {
         self.provisioningCode = provisioningCode
         self.provisioningUserAgent = provisioningUserAgent
         self.provisioningVersion = provisioningVersion
+        self.peerExtraPublicKey = peerExtraPublicKey
     }
 
     public init(plaintext: Data) throws {
@@ -129,6 +132,12 @@ public struct LinkingProvisioningMessage {
         self.mrbk = try BackupKey(contents: Array(mrbkBytes))
 
         self.ephemeralBackupKey = try proto.ephemeralBackupKey.map({ try BackupKey.init(contents: Array($0)) })
+
+        if proto.hasPeerExtraPublicKey {
+            self.peerExtraPublicKey = proto.peerExtraPublicKey
+        } else {
+            self.peerExtraPublicKey = nil
+        }
     }
 
     public func buildEncryptedMessageBody(theirPublicKey: PublicKey) throws -> Data {
@@ -156,6 +165,7 @@ public struct LinkingProvisioningMessage {
         }
         messageBuilder.setMediaRootBackupKey(mrbk.serialize().asData)
         ephemeralBackupKey.map { messageBuilder.setEphemeralBackupKey($0.serialize().asData)}
+        if let pk = self.peerExtraPublicKey { messageBuilder.setPeerExtraPublicKey(pk) }
 
         let plainTextProvisionMessage = try messageBuilder.buildSerializedData()
 

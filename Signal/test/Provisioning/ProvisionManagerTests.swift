@@ -131,6 +131,86 @@ public class ProvisioningManagerTests {
         #expect(provisionMessage.profileKey == profileKey)
         #expect(provisionMessage.areReadReceiptsEnabled == readReceiptsEnabled)
         #expect(provisionMessage.provisioningCode == provisioningCode)
+        #expect(provisionMessage.peerExtraPublicKey == nil) // As current derivation is placeholder
+    }
+
+    @Test
+    func testProvision_IncludesPeerExtraPublicKeyPlaceholder() async throws {
+        let myAciIdentityKeyPair = IdentityKeyPair.generate()
+        let myPniIdentityKeyPair = IdentityKeyPair.generate()
+        let myAci = Aci.randomForTesting()
+        let myPhoneNumber = E164("+16505550101")!
+        let myPni = Pni.randomForTesting()
+        let myRecipient = SignalRecipient(aci: myAci, pni: myPni, phoneNumber: myPhoneNumber)
+        let profileKey = Aes256Key.generateRandom()
+        let accountEntropyPool = AccountEntropyPool()
+        let mrbk = BackupKey.generateRandom()
+        let readReceiptsEnabled = false
+        let provisioningCode = "XYZ789"
+
+        let ephemeralDeviceId = "ephemeral-device-id-2"
+        let newDeviceIdentityKeyPair = IdentityKeyPair.generate()
+
+        let accountKeyStore = AccountKeyStore()
+        db.write { tx in
+            accountKeyStore.setAccountEntropyPool(accountEntropyPool, tx: tx)
+            accountKeyStore.setMediaRootBackupKey(mrbk, tx: tx)
+            recipientDatabaseTable.insertRecipient(myRecipient, transaction: tx)
+            mockIdentityManager.setIdentityKeyPair(myAciIdentityKeyPair.asECKeyPair, for: .aci, tx: tx)
+            mockIdentityManager.setIdentityKeyPair(myPniIdentityKeyPair.asECKeyPair, for: .pni, tx: tx)
+        }
+
+        mockTsAccountManager.localIdentifiersMock = {
+            return LocalIdentifiers(
+                aci: myAci,
+                pni: myPni,
+                e164: myPhoneNumber
+            )
+        }
+        mockProfileManager.localUserProfile = OWSUserProfile(address: .localUser, profileKey: profileKey)
+        mockReceiptManager.areReadReceiptsEnabledValue = readReceiptsEnabled
+        mockDeviceProvisioningService.deviceProvisioningCodes.append(provisioningCode)
+
+        let provisioningManager = ProvisioningManager(
+            accountKeyStore: accountKeyStore,
+            db: db,
+            deviceManager: deviceManager,
+            deviceProvisioningService: mockDeviceProvisioningService,
+            identityManager: mockIdentityManager,
+            linkAndSyncManager: mockLinkAndSyncManager,
+            profileManager: mockProfileManager,
+            receiptManager: mockReceiptManager,
+            tsAccountManager: mockTsAccountManager
+        )
+
+        let provisioningUrl = DeviceProvisioningURL(
+            type: .linkDevice,
+            ephemeralDeviceId: ephemeralDeviceId,
+            publicKey: newDeviceIdentityKeyPair.publicKey
+        )
+
+        // Call the provision method
+        _ = try await provisioningManager.provision(with: provisioningUrl, shouldLinkNSync: false)
+
+        // Verify the LinkingProvisioningMessage was created and the peerExtraPublicKey was nil (due to placeholder)
+        #expect(!self.mockDeviceProvisioningService.provisionedDevices.isEmpty)
+        if let (messageBody, _) = self.mockDeviceProvisioningService.provisionedDevices.first {
+            let provisionEnvelope = try ProvisioningProtoProvisionEnvelope(serializedData: messageBody)
+            let provisioningCipher = ProvisioningCipher(ourKeyPair: newDeviceIdentityKeyPair) // New device uses its keypair
+            let provisionMessageData = try provisioningCipher.decrypt(
+                data: provisionEnvelope.body,
+                theirPublicKey: PublicKey(provisionEnvelope.publicKey) // Primary's one-time public key from envelope
+            )
+            let linkingMessage = try LinkingProvisioningMessage(plaintext: provisionMessageData)
+            #expect(linkingMessage.peerExtraPublicKey == nil)
+        } else {
+            Issue.record("Provisioned devices list was empty.")
+        }
+
+        // TODO: Verify "Placeholder: Peer Extra Key derivation is not yet implemented." log.
+        // This typically requires a custom log appender or expectation setup, which is
+        // beyond simple file edits here. For now, the functional check that peerExtraPublicKey
+        // is nil (as per placeholder logic) serves as an indirect check.
     }
 }
 

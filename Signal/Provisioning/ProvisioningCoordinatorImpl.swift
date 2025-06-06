@@ -394,6 +394,38 @@ class ProvisioningCoordinatorImpl: ProvisioningCoordinator {
                 tx: tx
             )
 
+            // Store peerExtraPublicKey for the primary device
+            if let receivedPeerKey = provisionMessage.peerExtraPublicKey {
+                Logger.info("Received peerExtraPublicKey from primary device during provisioning.")
+                // The ACI in provisionMessage is the ACI of the primary device.
+                if let primaryDeviceAci = Aci(uuidString: provisionMessage.aci.uuidString),
+                   let primarySignalAccount = self.tsAccountManager.fetchSignalAccount(for: primaryDeviceAci, transaction: tx) {
+
+                    let updatedPrimarySignalAccount = SignalAccount(
+                        id: primarySignalAccount.id,
+                        uniqueId: primarySignalAccount.uniqueId,
+                        contactAvatarHash: primarySignalAccount.contactAvatarHash,
+                        multipleAccountLabelText: primarySignalAccount.multipleAccountLabelText,
+                        recipientPhoneNumber: primarySignalAccount.recipientPhoneNumber,
+                        recipientServiceId: primarySignalAccount.recipientServiceId,
+                        hasDeprecatedRepresentation: primarySignalAccount.hasDeprecatedRepresentation,
+                        cnContactId: primarySignalAccount.cnContactId,
+                        givenName: primarySignalAccount.givenName,
+                        familyName: primarySignalAccount.familyName,
+                        nickname: primarySignalAccount.nickname,
+                        fullName: primarySignalAccount.fullName,
+                        peerExtraPublicKey: receivedPeerKey, // Set the new key
+                        peerExtraPublicKeyTimestamp: Date().millisecondsSince1970 // Set current timestamp
+                    )
+                    updatedPrimarySignalAccount.anyOverwritingUpdate(transaction: tx)
+                    Logger.info("Stored peerExtraPublicKey from primary device (ACI: \(primaryDeviceAci.uuidString))")
+                } else {
+                    Logger.warn("Could not find SignalAccount for primary device (ACI: \(provisionMessage.aci.uuidString)) to store its peerExtraPublicKey.")
+                }
+            } else {
+                Logger.info("No peerExtraPublicKey received in ProvisionMessage.")
+            }
+
             return nil
         }
         if let error {

@@ -267,4 +267,95 @@ class GRDBFinderTest: SignalBaseTest {
 
         XCTAssertEqual(expectedAddresses, missingAndStaleAddresses)
     }
+
+    func testSignalAccountPeerExtraPublicKeyMigrationAndStorage() throws {
+        let dbPool = SSKEnvironment.shared.databaseStorageRef.grdbStorage.pool
+
+        // 1. Verify Migration - Check if columns exist
+        try dbPool.read { db in
+            let columns = try db.columns(in: SignalAccount.databaseTableName)
+            let columnNames = columns.map { $0.name }
+            XCTAssertTrue(columnNames.contains(SignalAccount.CodingKeys.peerExtraPublicKey.rawValue), "peerExtraPublicKey column should exist")
+            XCTAssertTrue(columnNames.contains(SignalAccount.CodingKeys.peerExtraPublicKeyTimestamp.rawValue), "peerExtraPublicKeyTimestamp column should exist")
+        }
+
+        let serviceIdWithoutNewFields = try ServiceId.parseFrom(serviceIdString: UUID().uuidString)
+        let accountWithoutNewFields = SignalAccount(
+            recipientPhoneNumber: "1112223333",
+            recipientServiceId: serviceIdWithoutNewFields,
+            multipleAccountLabelText: "Test1",
+            cnContactId: "cnTest1",
+            givenName: "Given1",
+            familyName: "Family1",
+            nickname: "Nick1",
+            fullName: "Full1",
+            contactAvatarHash: nil
+            // New fields are nil by default in the initializer used
+        )
+
+        // 2. Insert without new fields, fetch and verify
+        try dbPool.write { db in
+            try accountWithoutNewFields.insert(db)
+        }
+
+        var fetchedAccount1: SignalAccount?
+        try dbPool.read { db in
+            fetchedAccount1 = try SignalAccount.fetchOne(db, key: ["uniqueId": accountWithoutNewFields.uniqueId])
+        }
+
+        XCTAssertNotNil(fetchedAccount1)
+        XCTAssertEqual(fetchedAccount1?.recipientPhoneNumber, "1112223333")
+        XCTAssertEqual(fetchedAccount1?.givenName, "Given1")
+        XCTAssertNil(fetchedAccount1?.peerExtraPublicKey, "peerExtraPublicKey should be nil when not set")
+        XCTAssertNil(fetchedAccount1?.peerExtraPublicKeyTimestamp, "peerExtraPublicKeyTimestamp should be nil when not set")
+
+        // 3. Insert with new fields, fetch and verify
+        let serviceIdWithNewFields = try ServiceId.parseFrom(serviceIdString: UUID().uuidString)
+        let peerKeyData = "testPeerKey".data(using: .utf8)!
+        let peerTimestampValue = Int64(1678886400000) // A fixed timestamp
+
+        let accountWithNewFields = SignalAccount(
+            recipientPhoneNumber: "4445556666",
+            recipientServiceId: serviceIdWithNewFields,
+            multipleAccountLabelText: "Test2",
+            cnContactId: "cnTest2",
+            givenName: "Given2",
+            familyName: "Family2",
+            nickname: "Nick2",
+            fullName: "Full2",
+            contactAvatarHash: "hash2".data(using: .utf8),
+            peerExtraPublicKey: peerKeyData,
+            peerExtraPublicKeyTimestamp: peerTimestampValue
+        )
+
+        try dbPool.write { db in
+            try accountWithNewFields.insert(db)
+        }
+
+        var fetchedAccount2: SignalAccount?
+        try dbPool.read { db in
+            fetchedAccount2 = try SignalAccount.fetchOne(db, key: ["uniqueId": accountWithNewFields.uniqueId])
+        }
+
+        XCTAssertNotNil(fetchedAccount2)
+        XCTAssertEqual(fetchedAccount2?.recipientPhoneNumber, "4445556666")
+        XCTAssertEqual(fetchedAccount2?.givenName, "Given2")
+        XCTAssertEqual(fetchedAccount2?.contactAvatarHash, "hash2".data(using: .utf8))
+        XCTAssertEqual(fetchedAccount2?.peerExtraPublicKey, peerKeyData)
+        XCTAssertEqual(fetchedAccount2?.peerExtraPublicKeyTimestamp, peerTimestampValue)
+
+        // Verify that existing data (e.g. from accountWithoutNewFields) is preserved.
+        // This is implicitly tested by fetching accountWithoutNewFields again,
+        // but an explicit check on a different pre-existing record would be more robust
+        // if we had one easily available or created one before the migration.
+        // For now, ensuring fetchedAccount1 still has its original data is a good sign.
+        var refetchedAccount1: SignalAccount?
+        try dbPool.read { db in
+            refetchedAccount1 = try SignalAccount.fetchOne(db, key: ["uniqueId": accountWithoutNewFields.uniqueId])
+        }
+        XCTAssertNotNil(refetchedAccount1)
+        XCTAssertEqual(refetchedAccount1?.givenName, "Given1") // Check an old field
+        XCTAssertNil(refetchedAccount1?.peerExtraPublicKey) // New field should still be nil
+
+    }
 }

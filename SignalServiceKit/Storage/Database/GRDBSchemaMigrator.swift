@@ -327,6 +327,7 @@ public class GRDBSchemaMigrator {
         case populateAvatarDefaultColorTable
         case addStoryRecipient
         case addAttachmentLastFullscreenViewTimestamp
+        case addPeerExtraPublicKeyToSignalAccount
 
         // NOTE: Every time we add a migration id, consider
         // incrementing grdbSchemaVersionLatest.
@@ -3957,6 +3958,11 @@ public class GRDBSchemaMigrator {
             try tx.database.alter(table: "Attachment") { table in
                 table.add(column: "lastFullscreenViewTimestamp", .integer)
             }
+            return .success(())
+        }
+
+        migrator.registerMigration(.addPeerExtraPublicKeyToSignalAccount) { transaction in
+            try AddPeerExtraPublicKeyMigration().prepare(transaction.database)
             return .success(())
         }
 
