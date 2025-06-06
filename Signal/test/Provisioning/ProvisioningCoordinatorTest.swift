@@ -174,6 +174,151 @@ public class ProvisioningCoordinatorTest: XCTestCase {
         XCTAssertEqual(svrMock.syncedMasterKey?.rawData, masterKey.rawData)
     }
 
+    func testCompleteProvisioning_setLocalKeys_storesPeerExtraPublicKey() async throws {
+        let primaryAci = Aci.randomForTesting()
+        let primaryPni = Pni.randomForTesting()
+        let primaryPhoneNumber = "+11112223333"
+        let deviceId = DeviceId(validating: 2)! // Secondary device ID
+
+        let peerKeyData = "primaryPeerExtraKey".data(using: .utf8)!
+
+        let provisionMessage = LinkingProvisioningMessage(
+            rootKey: .masterKey(try MasterKey(data: Randomness.generateRandomBytes(32))),
+            aci: primaryAci,
+            phoneNumber: primaryPhoneNumber,
+            pni: primaryPni,
+            aciIdentityKeyPair: try IdentityKeyPair.generate(),
+            pniIdentityKeyPair: try IdentityKeyPair.generate(),
+            profileKey: Aes256Key.generateRandom(),
+            mrbk: try BackupKey.generateRandom(),
+            ephemeralBackupKey: nil,
+            areReadReceiptsEnabled: true,
+            provisioningCode: "test-code",
+            peerExtraPublicKey: peerKeyData // Key from primary
+        )
+
+        let authedDevice = AuthedDevice.Explicit(
+            aci: primaryAci, // This is the ACI of the account being linked to (primary)
+            phoneNumber: E164(primaryPhoneNumber)!,
+            pni: primaryPni,
+            deviceId: deviceId, // This is the new device's ID
+            authPassword: "testAuthPassword"
+        )
+
+        // Mock TSAccountManager to return a SignalAccount for the primary device
+        let primarySignalAccount = SignalAccount(
+            recipientPhoneNumber: primaryPhoneNumber,
+            recipientServiceId: primaryAci,
+            multipleAccountLabelText: nil,
+            cnContactId: nil,
+            givenName: "Primary",
+            familyName: "Device",
+            nickname: "",
+            fullName: "Primary Device",
+            contactAvatarHash: nil
+        )
+
+        var updatedAccount: SignalAccount?
+        tsAccountManagerMock.fetchSignalAccountMock = { aci, tx in
+            if aci == primaryAci {
+                return primarySignalAccount
+            }
+            return nil
+        }
+        // Capture the account that is saved
+        SignalAccount.anyOverwritingUpdateHook = { account, tx in
+            updatedAccount = account
+        }
+        defer { SignalAccount.anyOverwritingUpdateHook = nil }
+
+
+        // Call the method under test
+        _ = try await provisioningCoordinator.completeProvisioning_setLocalKeys(
+            provisionMessage: provisionMessage,
+            prekeyBundles: RegistrationPreKeyUploadBundles(aciBundle: .forTesting(), pniBundle: .forTesting()),
+            authedDevice: authedDevice
+        )
+
+        // Verification
+        XCTAssertNotNil(updatedAccount, "SignalAccount for primary device should have been updated")
+        XCTAssertEqual(updatedAccount?.peerExtraPublicKey, peerKeyData)
+        XCTAssertNotNil(updatedAccount?.peerExtraPublicKeyTimestamp, "Timestamp should be set")
+        XCTAssertEqual(updatedAccount?.recipientServiceId, primaryAci) // Ensure it's the primary's account
+    }
+
+    func testCompleteProvisioning_setLocalKeys_handlesNilPeerExtraPublicKey() async throws {
+        let primaryAci = Aci.randomForTesting()
+        let primaryPni = Pni.randomForTesting()
+        let primaryPhoneNumber = "+12223334444"
+        let deviceId = DeviceId(validating: 3)!
+
+        let provisionMessage = LinkingProvisioningMessage(
+            rootKey: .masterKey(try MasterKey(data: Randomness.generateRandomBytes(32))),
+            aci: primaryAci,
+            phoneNumber: primaryPhoneNumber,
+            pni: primaryPni,
+            aciIdentityKeyPair: try IdentityKeyPair.generate(),
+            pniIdentityKeyPair: try IdentityKeyPair.generate(),
+            profileKey: Aes256Key.generateRandom(),
+            mrbk: try BackupKey.generateRandom(),
+            ephemeralBackupKey: nil,
+            areReadReceiptsEnabled: true,
+            provisioningCode: "test-code-nil",
+            peerExtraPublicKey: nil // Key is nil
+        )
+
+        let authedDevice = AuthedDevice.Explicit(
+            aci: primaryAci,
+            phoneNumber: E164(primaryPhoneNumber)!,
+            pni: primaryPni,
+            deviceId: deviceId,
+            authPassword: "testAuthPassword"
+        )
+
+        let primarySignalAccount = SignalAccount(
+            recipientPhoneNumber: primaryPhoneNumber,
+            recipientServiceId: primaryAci,
+            multipleAccountLabelText: nil,
+            cnContactId: nil,
+            givenName: "PrimaryNil",
+            familyName: "DeviceNil",
+            nickname: "",
+            fullName: "PrimaryNil DeviceNil",
+            contactAvatarHash: nil,
+            peerExtraPublicKey: "existingKey".data(using: .utf8), // Pre-existing key
+            peerExtraPublicKeyTimestamp: 1000 // Pre-existing timestamp
+        )
+
+        var updatedAccount: SignalAccount? = nil
+        tsAccountManagerMock.fetchSignalAccountMock = { aci, tx in
+            if aci == primaryAci {
+                return primarySignalAccount
+            }
+            return nil
+        }
+        SignalAccount.anyOverwritingUpdateHook = { account, tx in
+             updatedAccount = account
+        }
+        defer { SignalAccount.anyOverwritingUpdateHook = nil }
+
+        _ = try await provisioningCoordinator.completeProvisioning_setLocalKeys(
+            provisionMessage: provisionMessage,
+            prekeyBundles: RegistrationPreKeyUploadBundles(aciBundle: .forTesting(), pniBundle: .forTesting()),
+            authedDevice: authedDevice
+        )
+
+        // If peerExtraPublicKey is nil in the message, we expect no update to these fields.
+        // The current implementation in ProvisioningCoordinatorImpl will log "No peerExtraPublicKey received".
+        // We need to verify that the existing values (if any) on SignalAccount are not wiped.
+        // Or, if the intent is to clear them if not present, that needs to be tested.
+        // Based on the added code `if let receivedPeerKey = provisionMessage.peerExtraPublicKey`,
+        // if `receivedPeerKey` is nil, the block is skipped, so existing values should remain.
+
+        XCTAssertNotNil(updatedAccount, "SignalAccount should still be 'updated' (or re-saved with no changes to peer keys)")
+        XCTAssertEqual(updatedAccount?.peerExtraPublicKey, "existingKey".data(using: .utf8), "Existing peerExtraPublicKey should not be wiped if incoming is nil")
+        XCTAssertEqual(updatedAccount?.peerExtraPublicKeyTimestamp, 1000, "Existing peerExtraPublicKeyTimestamp should not be wiped if incoming is nil")
+    }
+
     private func keyPairForTesting() throws -> ECKeyPair {
         let privateKey = try PrivateKey(Array(repeating: 0, count: 31) + [.random(in: 0..<0x48)])
         return ECKeyPair(IdentityKeyPair(publicKey: privateKey.publicKey, privateKey: privateKey))

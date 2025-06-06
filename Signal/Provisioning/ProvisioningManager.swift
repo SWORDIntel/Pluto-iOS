@@ -103,6 +103,21 @@ public class ProvisioningManager {
             owsFail("Can't provision without a pni.")
         }
 
+        // TODO: Implement actual HKDF-SHA256 derivation as per DESIGN_NOTES_MollyExtraLock.md
+        // For now, using a placeholder.
+        var derivedPeerExtraPublicKey: Data? = nil
+        let aciPrivateKey = provisioningState.aciIdentityKeyPair.privateKey
+        do {
+            // Placeholder for deriving peerExtraPrivateKey from aciPrivateKey
+            // let peerExtraPrivateKey = try KeyDerivation.derivePeerExtraPrivateKey(from: aciPrivateKey.serialize())
+            // Placeholder for deriving peerExtraPublicKey from peerExtraPrivateKey
+            // derivedPeerExtraPublicKey = try KeyDerivation.derivePeerExtraPublicKey(from: peerExtraPrivateKey)
+            Logger.warn("Placeholder: Peer Extra Key derivation is not yet implemented.")
+        } catch {
+            Logger.error("Error deriving peer extra public key: \(error)")
+            // Decide if provisioning should fail or continue without this key
+        }
+
         let provisioningCode = try await deviceProvisioningService.requestDeviceProvisioningCode()
 
         let provisioningMessage = LinkingProvisioningMessage(
@@ -116,7 +131,8 @@ public class ProvisioningManager {
             mrbk: provisioningState.mediaRootBackupKey,
             ephemeralBackupKey: ephemeralBackupKey,
             areReadReceiptsEnabled: provisioningState.areReadReceiptsEnabled,
-            provisioningCode: provisioningCode.verificationCode
+            provisioningCode: provisioningCode.verificationCode,
+            peerExtraPublicKey: derivedPeerExtraPublicKey
         )
 
         let theirPublicKey = deviceProvisioningUrl.publicKey
