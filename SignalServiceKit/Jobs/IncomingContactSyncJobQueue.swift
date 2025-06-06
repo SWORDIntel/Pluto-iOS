@@ -253,6 +253,52 @@ private class IncomingContactSyncJobRunner: JobRunner {
             transaction: tx
         )
 
+        // Update SignalAccount with peerExtraPublicKey and peerExtraPublicKeyTimestamp if available
+        if let phoneNumber = contactDetails.phoneNumber {
+            if let existingSignalAccount = SignalAccount.anyFetch(phoneNumberE164: phoneNumber.stringValue, transaction: tx) {
+                var shouldUpdate = false
+                var newPeerExtraPublicKey = existingSignalAccount.peerExtraPublicKey
+                var newPeerExtraPublicKeyTimestamp = existingSignalAccount.peerExtraPublicKeyTimestamp
+
+                if contactDetails.hasPeerExtraPublicKey {
+                    let incomingKey = contactDetails.getPeerExtraPublicKey()
+                    if incomingKey != newPeerExtraPublicKey {
+                        newPeerExtraPublicKey = incomingKey
+                        shouldUpdate = true
+                    }
+                }
+                if contactDetails.hasPeerExtraPublicKeyTimestamp() {
+                    let incomingTimestamp = contactDetails.getPeerExtraPublicKeyTimestamp()
+                    if incomingTimestamp != newPeerExtraPublicKeyTimestamp {
+                        newPeerExtraPublicKeyTimestamp = incomingTimestamp
+                        shouldUpdate = true
+                    }
+                }
+
+                if shouldUpdate {
+                    let updatedSignalAccount = SignalAccount(
+                        id: existingSignalAccount.id,
+                        uniqueId: existingSignalAccount.uniqueId,
+                        contactAvatarHash: existingSignalAccount.contactAvatarHash,
+                        multipleAccountLabelText: existingSignalAccount.multipleAccountLabelText,
+                        recipientPhoneNumber: existingSignalAccount.recipientPhoneNumber,
+                        recipientServiceId: existingSignalAccount.recipientServiceId,
+                        hasDeprecatedRepresentation: existingSignalAccount.hasDeprecatedRepresentation,
+                        cnContactId: existingSignalAccount.cnContactId,
+                        givenName: existingSignalAccount.givenName,
+                        familyName: existingSignalAccount.familyName,
+                        nickname: existingSignalAccount.nickname,
+                        fullName: existingSignalAccount.fullName,
+                        peerExtraPublicKey: newPeerExtraPublicKey,
+                        peerExtraPublicKeyTimestamp: newPeerExtraPublicKeyTimestamp
+                    )
+                    updatedSignalAccount.anyOverwritingUpdate(transaction: tx)
+                    // Consider posting a notification if SignalAccount content relevant to UI has changed.
+                    // For now, assuming these specific keys don't directly trigger UI updates that need immediate refresh here.
+                }
+            }
+        }
+
         return contactDetails.phoneNumber
     }
 

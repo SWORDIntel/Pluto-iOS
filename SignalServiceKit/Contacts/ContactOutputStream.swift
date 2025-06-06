@@ -57,6 +57,13 @@ final class ContactOutputStream {
             contactBuilder.setExpireTimer(disappearingMessagesConfiguration.durationSeconds)
         }
 
+        if let peerExtraPublicKey = signalAccount?.peerExtraPublicKey {
+            contactBuilder.setPeerExtraPublicKey(peerExtraPublicKey)
+        }
+        if let peerExtraPublicKeyTimestamp = signalAccount?.peerExtraPublicKeyTimestamp {
+            contactBuilder.setPeerExtraPublicKeyTimestamp(peerExtraPublicKeyTimestamp)
+        }
+
         let contactData: Data
         do {
             contactData = try chunkedOutputTransform.transform(data: contactBuilder.buildSerializedData())

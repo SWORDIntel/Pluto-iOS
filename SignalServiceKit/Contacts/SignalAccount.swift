@@ -27,6 +27,8 @@ public final class SignalAccount: NSObject, SDSCodableModel, Decodable {
         case familyName
         case nickname
         case fullName
+        case peerExtraPublicKey
+        case peerExtraPublicKeyTimestamp
     }
 
     public var id: RowId?
@@ -46,6 +48,9 @@ public final class SignalAccount: NSObject, SDSCodableModel, Decodable {
     public let nickname: String
     public let fullName: String
 
+    public let peerExtraPublicKey: Data?
+    public let peerExtraPublicKeyTimestamp: Int64?
+
     public convenience init(
         recipientPhoneNumber: String?,
         recipientServiceId: ServiceId?,
@@ -55,7 +60,9 @@ public final class SignalAccount: NSObject, SDSCodableModel, Decodable {
         familyName: String,
         nickname: String,
         fullName: String,
-        contactAvatarHash: Data?
+        contactAvatarHash: Data?,
+        peerExtraPublicKey: Data? = nil,
+        peerExtraPublicKeyTimestamp: Int64? = nil
     ) {
         self.init(
             id: nil,
@@ -69,7 +76,9 @@ public final class SignalAccount: NSObject, SDSCodableModel, Decodable {
             givenName: givenName,
             familyName: familyName,
             nickname: nickname,
-            fullName: fullName
+            fullName: fullName,
+            peerExtraPublicKey: peerExtraPublicKey,
+            peerExtraPublicKeyTimestamp: peerExtraPublicKeyTimestamp
         )
     }
 
@@ -85,7 +94,9 @@ public final class SignalAccount: NSObject, SDSCodableModel, Decodable {
         givenName: String,
         familyName: String,
         nickname: String,
-        fullName: String
+        fullName: String,
+        peerExtraPublicKey: Data? = nil,
+        peerExtraPublicKeyTimestamp: Int64? = nil
     ) {
         self.id = id
         self.uniqueId = uniqueId
@@ -99,6 +110,8 @@ public final class SignalAccount: NSObject, SDSCodableModel, Decodable {
         self.familyName = familyName
         self.nickname = nickname
         self.fullName = fullName
+        self.peerExtraPublicKey = peerExtraPublicKey
+        self.peerExtraPublicKeyTimestamp = peerExtraPublicKeyTimestamp
     }
 
     public init(from decoder: Decoder) throws {
@@ -138,6 +151,8 @@ public final class SignalAccount: NSObject, SDSCodableModel, Decodable {
         recipientPhoneNumber = try container.decodeIfPresent(String.self, forKey: .recipientPhoneNumber)
         recipientServiceId = try container.decodeIfPresent(String.self, forKey: .recipientServiceId)
             .flatMap { try? ServiceId.parseFrom(serviceIdString: $0) }
+        peerExtraPublicKey = try container.decodeIfPresent(Data.self, forKey: .peerExtraPublicKey)
+        peerExtraPublicKeyTimestamp = try container.decodeIfPresent(Int64.self, forKey: .peerExtraPublicKeyTimestamp)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -157,6 +172,8 @@ public final class SignalAccount: NSObject, SDSCodableModel, Decodable {
         try container.encode(familyName, forKey: .familyName)
         try container.encode(nickname, forKey: .nickname)
         try container.encode(fullName, forKey: .fullName)
+        try container.encodeIfPresent(peerExtraPublicKey, forKey: .peerExtraPublicKey)
+        try container.encodeIfPresent(peerExtraPublicKeyTimestamp, forKey: .peerExtraPublicKeyTimestamp)
     }
 
     public func didInsert(with rowID: Int64, for column: String?) {
@@ -276,6 +293,8 @@ extension SignalAccount {
         && multipleAccountLabelText == otherAccount.multipleAccountLabelText
         && contactAvatarHash == otherAccount.contactAvatarHash
         && cnContactId == otherAccount.cnContactId
+        && peerExtraPublicKey == otherAccount.peerExtraPublicKey
+        && peerExtraPublicKeyTimestamp == otherAccount.peerExtraPublicKeyTimestamp
         && hasSameName(otherAccount)
     }
 
@@ -354,7 +373,9 @@ extension SignalAccount: NSCopying {
             givenName: self.givenName,
             familyName: self.familyName,
             nickname: self.nickname,
-            fullName: self.fullName
+            fullName: self.fullName,
+            peerExtraPublicKey: self.peerExtraPublicKey,
+            peerExtraPublicKeyTimestamp: self.peerExtraPublicKeyTimestamp
         )
     }
 }

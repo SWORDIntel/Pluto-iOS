@@ -3845,6 +3845,24 @@ struct SignalServiceProtos_ContactDetails: Sendable {
   /// Clears the value of `inboxPosition`. Subsequent reads from it will return its default value.
   mutating func clearInboxPosition() {self._inboxPosition = nil}
 
+  var peerExtraPublicKey: Data? {
+    get {return _peerExtraPublicKey}
+    set {_peerExtraPublicKey = newValue}
+  }
+  /// Returns true if `peerExtraPublicKey` has been explicitly set.
+  var hasPeerExtraPublicKey: Bool {return self._peerExtraPublicKey != nil}
+  /// Clears the value of `peerExtraPublicKey`. Subsequent reads from it will return its default value.
+  mutating func clearPeerExtraPublicKey() {self._peerExtraPublicKey = nil}
+
+  var peerExtraPublicKeyTimestamp: Int64? {
+    get {return _peerExtraPublicKeyTimestamp}
+    set {_peerExtraPublicKeyTimestamp = newValue}
+  }
+  /// Returns true if `peerExtraPublicKeyTimestamp` has been explicitly set.
+  var hasPeerExtraPublicKeyTimestamp: Bool {return self._peerExtraPublicKeyTimestamp != nil}
+  /// Clears the value of `peerExtraPublicKeyTimestamp`. Subsequent reads from it will return its default value.
+  mutating func clearPeerExtraPublicKeyTimestamp() {self._peerExtraPublicKeyTimestamp = nil}
+
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   struct Avatar: Sendable {
@@ -3887,6 +3905,8 @@ struct SignalServiceProtos_ContactDetails: Sendable {
   fileprivate var _expireTimer: UInt32? = nil
   fileprivate var _expireTimerVersion: UInt32? = nil
   fileprivate var _inboxPosition: UInt32? = nil
+  fileprivate var _peerExtraPublicKey: Data? = nil
+  fileprivate var _peerExtraPublicKeyTimestamp: Int64? = nil
 }
 
 struct SignalServiceProtos_Pack: Sendable {
@@ -8733,6 +8753,8 @@ extension SignalServiceProtos_ContactDetails: SwiftProtobuf.Message, SwiftProtob
     8: .same(proto: "expireTimer"),
     12: .same(proto: "expireTimerVersion"),
     10: .same(proto: "inboxPosition"),
+    13: .same(proto: "peerExtraPublicKey"),
+    14: .same(proto: "peerExtraPublicKeyTimestamp"),
   ]
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -8748,6 +8770,8 @@ extension SignalServiceProtos_ContactDetails: SwiftProtobuf.Message, SwiftProtob
       case 9: try { try decoder.decodeSingularStringField(value: &self._aci) }()
       case 10: try { try decoder.decodeSingularUInt32Field(value: &self._inboxPosition) }()
       case 12: try { try decoder.decodeSingularUInt32Field(value: &self._expireTimerVersion) }()
+      case 13: try { try decoder.decodeSingularBytesField(value: &self._peerExtraPublicKey) }()
+      case 14: try { try decoder.decodeSingularInt64Field(value: &self._peerExtraPublicKeyTimestamp) }()
       default: break
       }
     }
@@ -8779,6 +8803,12 @@ extension SignalServiceProtos_ContactDetails: SwiftProtobuf.Message, SwiftProtob
     try { if let v = self._expireTimerVersion {
       try visitor.visitSingularUInt32Field(value: v, fieldNumber: 12)
     } }()
+    try { if let v = self._peerExtraPublicKey {
+      try visitor.visitSingularBytesField(value: v, fieldNumber: 13)
+    } }()
+    try { if let v = self._peerExtraPublicKeyTimestamp {
+      try visitor.visitSingularInt64Field(value: v, fieldNumber: 14)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -8790,6 +8820,8 @@ extension SignalServiceProtos_ContactDetails: SwiftProtobuf.Message, SwiftProtob
     if lhs._expireTimer != rhs._expireTimer {return false}
     if lhs._expireTimerVersion != rhs._expireTimerVersion {return false}
     if lhs._inboxPosition != rhs._inboxPosition {return false}
+    if lhs._peerExtraPublicKey != rhs._peerExtraPublicKey {return false}
+    if lhs._peerExtraPublicKeyTimestamp != rhs._peerExtraPublicKeyTimestamp {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
